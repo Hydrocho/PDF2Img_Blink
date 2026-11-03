@@ -1,0 +1,3 @@
+PDF.js 6.5.438 — Apache-2.0 — https://github.com/mozilla/pdf.js
+fflate 0.8.2 — MIT — https://github.com/101arrowz/fflate
+All runtime assets are included locally. No CDN requests are used.

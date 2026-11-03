@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>빈칸 작업실 · PDF Blank Editor</title><link rel="stylesheet" href="style.css"><script defer src="bootstrap.js"></script></head>
+<body>
+<section id="startup-help" hidden role="alert"><h2>start.cmd로 실행해 주세요</h2><p>HTML 파일을 직접 열면 브라우저 보안 정책으로 실행되지 않습니다. 이 창을 닫고, web 폴더의 상위 프로그램 폴더에 있는 <strong>start.cmd</strong>를 더블클릭하세요.</p><a href="http://127.0.0.1:8765/">이미 start.cmd를 실행했다면 프로그램 열기 →</a></section>
+<header class="header"><div class="brand"><span class="logo">▱</span><div><h1>빈칸 작업실</h1><p>PDF BLANK EDITOR</p></div></div><span class="privacy"><i></i> 이 PC 안에서만 처리</span><button id="open" class="primary" disabled>＋ PDF 열기</button><input type="file" id="file" accept="application/pdf,.pdf" hidden></header>
+<main>
+<aside>
+  <div class="section-label">DOCUMENT</div><h2 id="filename">PDF를 불러오세요</h2><p id="document-info" class="muted">원본 파일은 변경되지 않습니다.</p>
+  <div class="row project-buttons"><button id="save-project" disabled>편집 저장</button><button id="load-project" disabled>편집 불러오기</button></div>
+  <input type="file" id="project-file" accept=".json,application/json" hidden>
+  <p class="hint">편집 파일은 PDF와 별도로 저장됩니다.</p>
+  <div class="divider"></div><div class="section-label">01 · 빈칸 편집</div>
+  <div class="mode-buttons"><button id="draw" aria-pressed="true" disabled>▭ 빈칸 그리기</button><button id="select" aria-pressed="false" disabled>↖ 선택 / 이동</button></div>
+  <p class="hint" id="mode-hint">가릴 부분을 마우스로 드래그하세요.<br>흰색 바탕과 검은 테두리로 채워집니다.</p>
+  <div class="row"><button id="undo" title="Ctrl+Z" disabled>↶ 실행 취소</button><button id="redo" title="Ctrl+Y" disabled>↷ 다시 실행</button></div><button id="delete" class="full danger" disabled>선택한 빈칸 삭제</button>
+  <div class="stats"><span>현재 페이지 빈칸</span><strong id="count">0</strong></div>
+  <div class="divider"></div><div class="section-label">02 · 이미지 저장</div>
+  <label for="dpi">출력 해상도</label><select id="dpi"><option value="150">150 DPI · 작은 파일</option><option value="200" selected>200 DPI · 권장</option><option value="300">300 DPI · 고화질</option></select>
+  <p class="hint">모든 페이지를 JPEG로 변환하여<br>ZIP 파일 하나로 저장합니다.</p>
+  <button id="export" class="primary full" disabled>전체 JPEG 저장 ↓</button>
+  <div id="progress-box" hidden><progress id="progress" max="100" value="0"></progress><button id="cancel" class="full">변환 취소</button></div>
+  <div class="local-note">문서가 서버로 업로드되지 않습니다.<br>인터넷 없이도 사용할 수 있어요.</div>
+</aside>
+<section class="workspace" aria-label="PDF 편집 영역">
+  <nav class="toolbar"><div class="row"><button id="prev" aria-label="이전 페이지" disabled>←</button><label class="page-label"><input id="page-number" type="number" min="1" value="1" aria-label="페이지 번호" disabled><span id="page-total">/ 0</span></label><button id="next" aria-label="다음 페이지" disabled>→</button></div><div class="row"><button id="zoom-out" aria-label="축소" disabled>−</button><span id="zoom-label">100%</span><button id="zoom-in" aria-label="확대" disabled>＋</button><button id="fit" disabled>너비 맞춤</button></div></nav>
+  <div id="viewport"><div id="empty"><div class="empty-icon">▤</div><span class="section-label">MAKE ROOM FOR ANSWERS</span><h2>자료를 열고, 빈칸을 만들어 보세요.</h2><p>PDF 위에 원하는 만큼 빈칸을 그린 뒤<br>수업에 바로 쓸 수 있는 JPEG로 저장하세요.</p><button id="open-empty" class="primary" disabled>PDF 파일 선택</button><div class="steps"><span>01 PDF 열기</span><b>→</b><span>02 빈칸 그리기</span><b>→</b><span>03 JPEG 저장</span></div></div>
+  <div id="paper" hidden><canvas id="pdf-canvas"></canvas><canvas id="overlay" aria-label="마우스로 빈칸을 그리는 영역" tabindex="0"></canvas></div></div>
+  <footer><span id="status" role="status" aria-live="polite">준비되었습니다. PDF 파일을 선택하세요.</span><span class="footer-tag">LOCAL FIRST</span></footer>
+</section>
+<aside class="inspector" aria-label="빈칸 속성">
+  <div class="section-label">BLANK PROPERTIES</div><h2 id="property-title">새 빈칸 설정</h2>
+  <p id="property-hint" class="hint">빈칸을 선택하면 테두리와 텍스트를 편집할 수 있습니다.</p>
+  <label class="check-label"><input type="checkbox" id="border-visible" checked disabled> 테두리 표시</label>
+  <label for="border-color">테두리 색상</label><input type="color" id="border-color" value="#000000" disabled>
+  <div class="divider"></div><label for="blank-text">빈칸 안의 텍스트</label>
+  <textarea id="blank-text" rows="6" maxlength="2000" placeholder="빈칸을 선택하고 내용을 입력하세요.&#10;여러 줄도 입력할 수 있어요." disabled></textarea>
+  <label for="font-size">글자 크기 (pt)</label><input type="number" id="font-size" min="8" max="72" step="1" value="16" disabled>
+  <p class="hint">텍스트는 가운데 정렬됩니다.<br>상자에 맞춰 줄바꿈·축소됩니다.<br>변경 내용은 즉시 반영됩니다.</p>
+  <div class="local-note" id="save-state">편집 파일로 저장하면<br>나중에 이어서 작업할 수 있어요.</div>
+</aside>
+</main>
+<dialog id="password-dialog"><form id="password-form"><h2>PDF 암호 입력</h2><p id="password-message">이 문서는 암호로 보호되어 있습니다.</p><input id="password" type="password" autocomplete="off" aria-label="PDF 암호" required><div class="row"><button type="button" id="password-cancel">취소</button><button class="primary" type="submit">열기</button></div></form></dialog>
+</body></html>
+
