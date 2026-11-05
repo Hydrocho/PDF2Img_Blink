@@ -88,6 +88,45 @@ test('PDF editing and exported JPEGs work locally end to end', {timeout:120000},
       assert.ok(pixels[2].inside[0]<100);
       assert.ok(pixels[2].form.slice(0,3).every(x=>x>245),'original PDF form appearance must be preserved');
     });
+    await t.test('image PDF contains only final JPEG pages with original display sizes',async()=>{
+      assert.equal(await page.locator('#export-pdf').count(),1,'image PDF export button exists');
+      await page.locator('#dpi').selectOption('150');
+      const zipPromise=page.waitForEvent('download');await page.locator('#export').click();
+      const zip=unzipSync(await readFile(await (await zipPromise).path()));
+      const downloadPromise=page.waitForEvent('download');await page.locator('#export-pdf').click();
+      const download=await downloadPromise;
+      assert.equal(download.suggestedFilename(),'sample-빈칸-이미지.pdf');
+      const bytes=await readFile(await download.path());
+      const output=await PDFDocument.load(bytes);
+      assert.equal(output.getPageCount(),3);
+      assert.equal(output.getForm().getFields().length,0);
+      const result=await page.evaluate(async bytes=>{
+        const lib=await import('./web/vendor/pdfjs/pdf.mjs');
+        const task=lib.getDocument({data:new Uint8Array(bytes)}),doc=await task.promise,results=[];
+        try{for(let n=1;n<=doc.numPages;n++){
+          const p=await doc.getPage(n),v=p.getViewport({scale:150/72}),ops=await p.getOperatorList();
+          const c=document.createElement('canvas');c.width=Math.round(v.width);c.height=Math.round(v.height);
+          const ctx=c.getContext('2d');await p.render({canvasContext:ctx,viewport:v}).promise;
+          results.push({size:[p.getViewport({scale:1}).width,p.getViewport({scale:1}).height],
+            text:(await p.getTextContent()).items,annotations:await p.getAnnotations(),
+            images:ops.fnArray.filter(x=>x===lib.OPS.paintImageXObject).length,
+            mask:Array.from(ctx.getImageData(125,104,1,1).data)});
+        }}finally{await task.destroy();}return results;
+      },Array.from(bytes));
+      assert.deepEqual(result.map(p=>p.size),[[360,480],[360,480],[300,300]]);
+      for(const p of result){assert.deepEqual(p.text,[]);assert.deepEqual(p.annotations,[]);assert.equal(p.images,1);}
+      for(const p of result.slice(0,2))assert.ok(p.mask.slice(0,3).every(x=>x>245));
+      // The PDF embeds exactly the final JPEG bytes, without copying source page objects.
+      for(const jpg of Object.values(zip))assert.ok(bytes.includes(Buffer.from(jpg)));
+    });
+    await t.test('image PDF cancellation unlocks both export buttons without downloading',async()=>{
+      let downloads=0;const onDownload=()=>downloads++;page.on('download',onDownload);
+      await page.locator('#dpi').selectOption('300');await page.locator('#export-pdf').click();await page.locator('#cancel').click();
+      await page.waitForFunction(()=>!document.querySelector('#export-pdf').disabled);
+      assert.equal(await page.locator('#export').isEnabled(),true);
+      assert.match(await page.locator('#status').textContent(),/취소/);
+      assert.equal(downloads,0);page.off('download',onDownload);
+    });
     await t.test('export cancellation unlocks editing',async()=>{
       await page.locator('#dpi').selectOption('300');await page.locator('#export').click();await page.locator('#cancel').click();
       await page.waitForFunction(()=>!document.querySelector('#export').disabled);

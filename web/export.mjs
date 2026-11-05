@@ -50,9 +50,13 @@ export function checkCanvasSize(width,height){
   if(width>16000||height>16000||width*height>40000000)throw new Error('페이지가 너무 큽니다. 출력 해상도를 낮춰 주세요.');
 }
 const checkAbort=signal=>{if(signal.aborted)throw new DOMException('취소되었습니다.','AbortError');};
-export async function exportPages(pdf, histories, {dpi,signal,onProgress}) {
+export async function exportPages(pdf, histories, {dpi,signal,onProgress,format='zip'}) {
+  if(!['zip','pdf'].includes(format))throw new Error('지원하지 않는 저장 형식입니다.');
+  checkAbort(signal);
+  const outputPdf=format==='pdf'?await (await import('./vendor/pdf-lib.mjs')).PDFDocument.create():null;
+  checkAbort(signal);
   const chunks=[];let total=0,zipError;
-  const zip=new Zip((err,data)=>{if(err){zipError=err;return;}total+=data.byteLength;chunks.push(data);});
+  const zip=outputPdf?null:new Zip((err,data)=>{if(err){zipError=err;return;}total+=data.byteLength;chunks.push(data);});
   const canvas=document.createElement('canvas');
   const scale=dpi/72, digits=Math.max(3,String(pdf.numPages).length);
   try{
@@ -71,9 +75,19 @@ export async function exportPages(pdf, histories, {dpi,signal,onProgress}) {
       checkAbort(signal);paintRects(ctx,histories.get(n)?.current??[],scale);
       const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('JPEG 변환에 실패했습니다.')),'image/jpeg',0.95));
       checkAbort(signal);
-      // STORE JPEGs: recompressing already compressed images wastes memory and CPU.
-      const entry=new ZipPassThrough(`page-${String(n).padStart(digits,'0')}.jpg`);zip.add(entry);
-      entry.push(new Uint8Array(await blob.arrayBuffer()),true);
+      const bytes=new Uint8Array(await blob.arrayBuffer());checkAbort(signal);
+      if(outputPdf){
+        total+=bytes.byteLength;
+        if(total>512*1024*1024)throw new Error('결과가 512MB를 넘었습니다. 해상도를 낮추거나 PDF를 나누어 주세요.');
+        const image=await outputPdf.embedJpg(bytes);checkAbort(signal);
+        // New pages contain only the composed JPEG, never original PDF objects.
+        const size=page.getViewport({scale:1});
+        outputPdf.addPage([size.width,size.height]).drawImage(image,{x:0,y:0,width:size.width,height:size.height});
+      }else{
+        // STORE JPEGs: recompressing already compressed images wastes memory and CPU.
+        const entry=new ZipPassThrough(`page-${String(n).padStart(digits,'0')}.jpg`);zip.add(entry);
+        entry.push(bytes,true);
+      }
       if(zipError)throw zipError;
       if(total>512*1024*1024)throw new Error('결과가 512MB를 넘었습니다. 해상도를 낮추거나 PDF를 나누어 주세요.');
       onProgress(n,pdf.numPages);
@@ -81,9 +95,15 @@ export async function exportPages(pdf, histories, {dpi,signal,onProgress}) {
       page.cleanup();
       await new Promise(r=>setTimeout(r,0));
     }
-    checkAbort(signal);zip.end();if(zipError)throw zipError;
+    checkAbort(signal);
+    if(outputPdf){
+      const bytes=await outputPdf.save({objectsPerTick:20});checkAbort(signal);
+      if(bytes.byteLength>512*1024*1024)throw new Error('결과가 512MB를 넘었습니다. 해상도를 낮추거나 PDF를 나누어 주세요.');
+      return new Blob([bytes],{type:'application/pdf'});
+    }
+    zip.end();if(zipError)throw zipError;
     return new Blob(chunks,{type:'application/zip'});
-  }finally{canvas.width=canvas.height=1;zip.terminate();}
+  }finally{canvas.width=canvas.height=1;zip?.terminate();}
 }
 
 

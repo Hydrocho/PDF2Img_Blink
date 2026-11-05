@@ -17,6 +17,8 @@ test('styled blanks and separate editing files', {timeout:120000},async t=>{
     await context.route('**/*',r=>{requests.push(r.request());return new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort();});
     const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(8000);
     await page.goto('http://127.0.0.1:18769');
+    // bootstrap loads app.mjs dynamically: wait for its input handlers before uploading.
+    await page.waitForFunction(()=>!document.querySelector('#open').disabled);
     assert.equal(await page.locator('#border-visible').count(),1,'border settings must exist');
     const doc=await PDFDocument.create();for(let i=0;i<2;i++)doc.addPage([360,480]).drawRectangle({x:0,y:0,width:360,height:480,color:rgb(.2,.3,.4)});
     const input={name:'원본.pdf',mimeType:'application/pdf',buffer:Buffer.from(await doc.save())};

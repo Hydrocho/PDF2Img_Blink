@@ -22,7 +22,11 @@ try{
   await page.locator('#project-file').setInputFiles({name:'saved.blank.json',mimeType:'application/json',buffer:saved});
   await page.waitForFunction(()=>!document.querySelector('#export').disabled);
   const download=page.waitForEvent('download');await page.locator('#export').click();const result=await download;
-  assert.match(result.suggestedFilename(),/\.zip$/);console.log('Portable extracted app: PDF open, styled text, JSON save/load, ZIP export and default 200 DPI PASS.');
+  assert.match(result.suggestedFilename(),/\.zip$/);
+  const pdfDownload=page.waitForEvent('download');await page.locator('#export-pdf').click();const pdfResult=await pdfDownload;
+  assert.match(pdfResult.suggestedFilename(),/\.pdf$/);
+  const flattened=await PDFDocument.load(await readFile(await pdfResult.path()));assert.equal(flattened.getPageCount(),1);
+  console.log('Portable extracted app: PDF open, styled text, JSON save/load, ZIP/image PDF export and default 200 DPI PASS.');
 }finally{await browser?.close();server.kill();}
 
 

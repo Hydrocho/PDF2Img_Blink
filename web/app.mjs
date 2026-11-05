@@ -16,7 +16,7 @@ const busy=()=>rendering||loading||exporting;
 function status(message,error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
 function controls(){
   const off=!pdf||busy();
-  for(const id of ['draw','select','zoom-in','zoom-out','fit','page-number','export','save-project','load-project'])$(id).disabled=off;
+  for(const id of ['draw','select','zoom-in','zoom-out','fit','page-number','export','export-pdf','save-project','load-project'])$(id).disabled=off;
   $('open').disabled=$('open-empty').disabled=loading||exporting;
   $('dpi').disabled=exporting;
   $('prev').disabled=off||pageNumber<=1;$('next').disabled=off||pageNumber>=pdf.numPages;
@@ -184,21 +184,21 @@ document.addEventListener('keydown',e=>{
 });
 window.addEventListener('beforeunload',e=>{if(dirty()||exporting){e.preventDefault();e.returnValue='';}});
 $('cancel').onclick=()=>{exportController?.abort();$('cancel').disabled=true;status('변환을 취소하고 있습니다…');};
-$('export').onclick=async()=>{
+async function exportDocument(format){
   if(!pdf||busy())return;cancelGesture();exporting=true;controls();$('progress-box').hidden=false;$('cancel').disabled=false;$('progress').value=0;
   exportController=new AbortController();
   try{
-    const blob=await exportPages(pdf,histories,{dpi:Number($('dpi').value),signal:exportController.signal,onProgress:(done,total)=>{
-      $('progress').value=done/total*100;status(`JPEG 변환 중… ${done} / ${total} 페이지`);
+    const blob=await exportPages(pdf,histories,{format,dpi:Number($('dpi').value),signal:exportController.signal,onProgress:(done,total)=>{
+      $('progress').value=done/total*100;status(done===total?'저장 파일을 만드는 중…':`${format==='pdf'?'이미지 PDF':'JPEG'} 변환 중… ${done} / ${total} 페이지`);
     }});
     if(exportController.signal.aborted)throw new DOMException('취소','AbortError');
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;
-    a.download=$('filename').textContent.replace(/\.pdf$/i,'').replace(/[<>:"/\\|?*]/g,'_')+'-빈칸-JPEG.zip';
-    a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
-    status(`${pdf.numPages}페이지 변환 완료 · ZIP 다운로드를 시작했습니다.`);
+    downloadBlob(blob,format==='pdf'?'-빈칸-이미지.pdf':'-빈칸-JPEG.zip');
+    status(`${pdf.numPages}페이지 변환 완료 · ${format==='pdf'?'PDF':'ZIP'} 다운로드를 시작했습니다.`);
   }catch(e){status(e.name==='AbortError'?'변환을 취소했습니다.':`저장에 실패했습니다. ${e.message}`,e.name!=='AbortError');}
   finally{exporting=false;exportController=null;$('progress-box').hidden=true;controls();}
-};
+}
+$('export').onclick=()=>exportDocument('zip');
+$('export-pdf').onclick=()=>exportDocument('pdf');
 function downloadBlob(blob,suffix){
   const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;
   a.download=documentMeta.name.replace(/\.pdf$/i,'').replace(/[<>:"/\\|?*]/g,'_')+suffix;
