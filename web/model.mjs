@@ -10,7 +10,7 @@ export function moveRect(rect, dx, dy, bounds) {
 export function resizeRect(rect, anchor, point, bounds) {
   return {...rect,...rectFromPoints(anchor,point,bounds)};
 }
-export const RECT_DEFAULTS=Object.freeze({border:true,borderColor:'#000000',text:'',fontSize:16});
+export const RECT_DEFAULTS=Object.freeze({border:true,borderColor:'#000000',borderWidth:1,transparent:false,text:'',fontSize:16});
 export function normalizeRect(rect){return {...RECT_DEFAULTS,...rect};}
 export class History {
   #states=[[]]; #index=0;

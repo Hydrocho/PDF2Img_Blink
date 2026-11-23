@@ -15,3 +15,7 @@ test('history snapshots are independent and a new edit clears redo',()=>{
   assert.equal(h.current[0].x,1);h.undo();assert.equal(h.current.length,0);h.redo();assert.equal(h.current[0].x,1);
   h.undo();h.commit([{x:5,y:6,w:7,h:8}]);assert.equal(h.canRedo,false);
 });
+test('RECT_DEFAULTS includes borderWidth and transparent defaults',()=>{
+  assert.deepEqual(mod.RECT_DEFAULTS,{border:true,borderColor:'#000000',borderWidth:1,transparent:false,text:'',fontSize:16});
+  assert.deepEqual(mod.normalizeRect({x:5,y:5,w:10,h:10}),{x:5,y:5,w:10,h:10,border:true,borderColor:'#000000',borderWidth:1,transparent:false,text:'',fontSize:16});
+});

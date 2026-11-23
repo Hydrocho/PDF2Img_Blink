@@ -9,8 +9,9 @@ function readRect(value){
   const r=normalizeRect(value);
   if(!finite(r.x,0,100000)||!finite(r.y,0,100000)||!finite(r.w,3,100000)||!finite(r.h,3,100000)||
      typeof r.border!=='boolean'||typeof r.borderColor!=='string'||!/^#[0-9a-f]{6}$/i.test(r.borderColor)||
+     !finite(r.borderWidth,1,20)||typeof r.transparent!=='boolean'||
      typeof r.text!=='string'||r.text.length>2000||!finite(r.fontSize,8,72))invalid();
-  return {x:r.x,y:r.y,w:r.w,h:r.h,border:r.border,borderColor:r.borderColor.toLowerCase(),text:r.text,fontSize:r.fontSize};
+  return {x:r.x,y:r.y,w:r.w,h:r.h,border:r.border,borderColor:r.borderColor.toLowerCase(),borderWidth:r.borderWidth,transparent:r.transparent,text:r.text,fontSize:r.fontSize};
 }
 export function createProject(meta,histories){
   return {format:'pdf-blank-editor',version:1,

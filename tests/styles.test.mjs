@@ -20,6 +20,8 @@ test('styled blanks and separate editing files', {timeout:120000},async t=>{
     // bootstrap loads app.mjs dynamically: wait for its input handlers before uploading.
     await page.waitForFunction(()=>!document.querySelector('#open').disabled);
     assert.equal(await page.locator('#border-visible').count(),1,'border settings must exist');
+    assert.equal(await page.locator('#border-width').count(),1,'border width setting must exist');
+    assert.equal(await page.locator('#transparent-bg').count(),1,'transparent setting must exist');
     const doc=await PDFDocument.create();for(let i=0;i<2;i++)doc.addPage([360,480]).drawRectangle({x:0,y:0,width:360,height:480,color:rgb(.2,.3,.4)});
     const input={name:'원본.pdf',mimeType:'application/pdf',buffer:Buffer.from(await doc.save())};
     const open=async file=>{await page.locator('#file').setInputFiles(file);await page.waitForFunction(()=>!document.querySelector('#draw').disabled);};
@@ -43,16 +45,22 @@ test('styled blanks and separate editing files', {timeout:120000},async t=>{
       assert.equal(centers.length,10);assert.ok(centers.every(y=>y>=11.25&&y<=18.75),'all ten lines must remain inside the text area');
     });
     await t.test('border color, visibility and Korean text survive resize and export',async()=>{
-      await drag(30,30,150,100);await select(60,50);await setColor('#ff0000');await page.locator('#blank-text').fill('한글 ABC');
+      await drag(30,30,150,100);await select(60,50);await setColor('#ff0000');
+      await page.locator('#border-width').fill('3');await page.locator('#border-width').dispatchEvent('change');
+      await page.locator('#transparent-bg').check();
+      await page.locator('#blank-text').fill('한글 ABC');
       await page.locator('#font-size').fill('20');await page.locator('#font-size').dispatchEvent('change');
       await drag(150,100,170,120);
       assert.equal(await page.locator('#blank-text').inputValue(),'한글 ABC');assert.equal(await page.locator('#border-color').inputValue(),'#ff0000');
+      assert.equal(await page.locator('#border-width').inputValue(),'3');assert.equal(await page.locator('#transparent-bg').isChecked(),true);
       await page.locator('#draw').click();await drag(190,40,310,110);await select(220,70);await page.locator('#border-visible').uncheck();
+      assert.equal(await page.locator('#border-width').isDisabled(),true);
       await page.locator('#blank-text').fill('두 번째');
       await page.locator('#next').click();await page.waitForFunction(()=>!document.querySelector('#draw').disabled);
       await page.locator('#draw').click();await drag(40,40,140,90);
       saved=await download('#save-project');const data=JSON.parse(saved);
       assert.equal(data.pages.length,2);assert.equal(data.pages[0].rects[0].text,'한글 ABC');assert.equal(data.pages[0].rects[0].borderColor,'#ff0000');
+      assert.equal(data.pages[0].rects[0].borderWidth,3);assert.equal(data.pages[0].rects[0].transparent,true);
       assert.equal(data.pages[0].rects[0].w,140);assert.equal(data.pages[0].rects[1].border,false);assert.equal(data.document.name,'원본.pdf');
       await page.locator('#dpi').selectOption('150');const zip=unzipSync(await download('#export'));
       const pixels=await page.evaluate(async b64=>{
@@ -60,9 +68,11 @@ test('styled blanks and separate editing files', {timeout:120000},async t=>{
         const c=document.createElement('canvas');c.width=img.width;c.height=img.height;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
         const at=(x,y)=>Array.from(ctx.getImageData(Math.floor(x*150/72),Math.floor(y*150/72),1,1).data);
         const area=ctx.getImageData(90,90,230,140).data;let dark=0;for(let i=0;i<area.length;i+=4)if(area[i]<80&&area[i+1]<80&&area[i+2]<80)dark++;
-        return {red:at(30,60),none:at(190.5,60),dark};
+        return {red:at(30,60),insideTrans:at(60,50),none:at(190.5,60),dark};
       },Buffer.from(zip['page-001.jpg']).toString('base64'));
-      assert.ok(pixels.red[0]>180&&pixels.red[1]<90&&pixels.red[2]<90);assert.ok(pixels.none.slice(0,3).every(n=>n>240));
+      assert.ok(pixels.red[0]>180&&pixels.red[1]<90&&pixels.red[2]<90);
+      assert.ok(pixels.insideTrans[0]<90&&pixels.insideTrans[1]<120,'transparent blank inside must retain PDF background');
+      assert.ok(pixels.none.slice(0,3).every(n=>n>240));
       assert.ok(pixels.dark>40,'text must be painted into JPEG');
     });
     await t.test('property changes undo and redo with their rectangle',async()=>{
@@ -77,6 +87,7 @@ test('styled blanks and separate editing files', {timeout:120000},async t=>{
       await page.locator('#project-file').setInputFiles({name:'saved.blank.json',mimeType:'application/json',buffer:saved});
       await page.waitForFunction(()=>document.querySelector('#count').textContent==='2');
       await select(60,50);assert.equal(await page.locator('#blank-text').inputValue(),'한글 ABC');assert.equal(await page.locator('#border-color').inputValue(),'#ff0000');
+      assert.equal(await page.locator('#border-width').inputValue(),'3');assert.equal(await page.locator('#transparent-bg').isChecked(),true);
       await select(220,70);assert.equal(await page.locator('#border-visible').isChecked(),false);
       await page.locator('#next').click();await page.waitForFunction(()=>!document.querySelector('#draw').disabled);
       assert.equal(await page.locator('#count').textContent(),'1');

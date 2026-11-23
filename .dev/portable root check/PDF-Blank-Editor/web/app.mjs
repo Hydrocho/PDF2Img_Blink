@@ -35,10 +35,12 @@ function inspector(off){
   const current=pdf&&selected>=0?history().current[selected]:null,r=normalizeRect(current??defaults);
   $('property-title').textContent=current?'선택한 빈칸':'새 빈칸 설정';
   $('property-hint').textContent=current?'이 빈칸의 테두리와 텍스트를 편집합니다.':'테두리 설정은 앞으로 그리는 빈칸에 적용됩니다.';
-  $('border-visible').disabled=off;$('border-color').disabled=off||!r.border;$('font-size').disabled=off;
+  $('border-visible').disabled=off;$('border-color').disabled=off||!r.border;$('border-width').disabled=off||!r.border;
+  $('transparent-bg').disabled=off;$('font-size').disabled=off;
   $('blank-text').disabled=off||!current;
   $('border-visible').checked=r.border;
-  for(const [id,value] of [['border-color',r.borderColor],['blank-text',current?r.text:''],['font-size',r.fontSize]]){
+  $('transparent-bg').checked=r.transparent;
+  for(const [id,value] of [['border-color',r.borderColor],['border-width',r.borderWidth],['blank-text',current?r.text:''],['font-size',r.fontSize]]){
     if(document.activeElement!==$(id))$(id).value=value;
   }
   $('save-state').textContent=!pdf?'편집 파일로 저장하면 나중에 이어서 작업할 수 있어요.':dirty()?'저장하지 않은 편집 내용이 있습니다.':'편집 파일 기준으로 변경 사항이 없습니다.';
@@ -51,6 +53,9 @@ function changeProperty(key,value){
 }
 $('border-visible').onchange=e=>changeProperty('border',e.target.checked);
 $('border-color').oninput=e=>changeProperty('borderColor',e.target.value);
+$('border-width').oninput=e=>{const value=Number(e.target.value);if(Number.isFinite(value)&&value>=1&&value<=20)changeProperty('borderWidth',value);};
+$('border-width').onchange=e=>{const value=Number(e.target.value);if(Number.isFinite(value)&&value>=1&&value<=20)changeProperty('borderWidth',value);else{e.target.value=selected>=0?normalizeRect(history().current[selected]).borderWidth:defaults.borderWidth;}};
+$('transparent-bg').onchange=e=>changeProperty('transparent',e.target.checked);
 $('blank-text').oninput=e=>{if(!e.isComposing)changeProperty('text',e.target.value);};
 $('blank-text').addEventListener('compositionend',e=>changeProperty('text',e.target.value));
 $('font-size').onchange=e=>{const value=Number(e.target.value);if(Number.isFinite(value)&&value>=8&&value<=72)changeProperty('fontSize',value);else{e.target.value=selected>=0?normalizeRect(history().current[selected]).fontSize:defaults.fontSize;}};

@@ -1,7 +1,7 @@
 import { Zip, ZipPassThrough } from './vendor/fflate.mjs';
 import {normalizeRect} from './model.mjs';
 
-export const BORDER_WIDTH = 1.2;
+export const BORDER_WIDTH = 1;
 const FONT='"Malgun Gothic", "Segoe UI", sans-serif';
 const segmenter=new Intl.Segmenter('ko',{granularity:'grapheme'});
 function textLines(ctx,text,width,size){
@@ -38,11 +38,12 @@ function paintText(ctx,r){
   lines.forEach((line,i)=>ctx.fillText(line,0,first+i*lineHeight));ctx.restore();
 }
 export function paintRects(ctx, rects, scale) {
-  ctx.save();ctx.scale(scale,scale);ctx.lineWidth=BORDER_WIDTH;
+  ctx.save();ctx.scale(scale,scale);
   for(const value of rects){
-    const r=normalizeRect(value);ctx.fillStyle='#fff';ctx.fillRect(r.x,r.y,r.w,r.h);
+    const r=normalizeRect(value);
+    if(!r.transparent){ctx.fillStyle='#fff';ctx.fillRect(r.x,r.y,r.w,r.h);}
     if(r.text)paintText(ctx,r);
-    if(r.border){ctx.strokeStyle=r.borderColor;ctx.strokeRect(r.x,r.y,r.w,r.h);}
+    if(r.border){ctx.lineWidth=r.borderWidth??BORDER_WIDTH;ctx.strokeStyle=r.borderColor;ctx.strokeRect(r.x,r.y,r.w,r.h);}
   }
   ctx.restore();
 }
