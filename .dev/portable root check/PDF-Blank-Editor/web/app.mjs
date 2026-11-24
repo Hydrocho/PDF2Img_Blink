@@ -9,6 +9,13 @@ let pdf=null, pageNumber=1, zoom=1, bounds={width:1,height:1}, histories=new Map
 let mode='draw', selected=-1, gesture=null, rendering=false, loading=false, exporting=false;
 let renderTask=null, renderVersion=0, exportController=null, savedSignature='[]', pendingPassword=null;
 let documentMeta=null,defaults={...RECT_DEFAULTS};
+let targetZoom=1, wheelTimer=null, pendingScroll=null;
+let spaceDown=false, isPanning=false, panStart=null;
+function updateCursor(){
+  const cur=spaceDown?(isPanning?'grabbing':'grab'):(mode==='draw'?'crosshair':'default');
+  $('overlay').style.cursor=cur;
+  $('viewport').style.cursor=spaceDown?(isPanning?'grabbing':'grab'):'';
+}
 const history=()=>{if(!histories.has(pageNumber))histories.set(pageNumber,new History());return histories.get(pageNumber);};
 const signature=()=>JSON.stringify([...histories].filter(([,h])=>h.current.length).sort(([a],[b])=>a-b).map(([n,h])=>[n,h.current]));
 const dirty=()=>signature()!==savedSignature;
@@ -26,7 +33,7 @@ function controls(){
   $('page-total').textContent=`/ ${pdf?.numPages??0}`;
   $('zoom-label').textContent=`${Math.round(zoom*100)}%`;
   $('count').textContent=pdf?history().current.length:0;
-  $('overlay').style.cursor=mode==='draw'?'crosshair':'default';
+  updateCursor();
   $('overlay').style.pointerEvents=off?'none':'auto';
   for(const id of ['draw','select'])$(id).setAttribute('aria-pressed',String(mode===id));
   inspector(off);
@@ -94,7 +101,13 @@ async function render(n=pageNumber,newZoom=zoom){
   try{
     const shot=await snapshot(pdf,n,newZoom);
     if(version!==renderVersion){shot.canvas.width=shot.canvas.height=1;return;}
-    pageNumber=n;zoom=newZoom;selected=-1;display(shot);status(`${n} / ${pdf.numPages} 페이지 · 드래그하여 빈칸을 그리세요.`);
+    pageNumber=n;zoom=newZoom;targetZoom=newZoom;selected=-1;display(shot);
+    if(pendingScroll){
+      $('viewport').scrollLeft=pendingScroll.left;
+      $('viewport').scrollTop=pendingScroll.top;
+      pendingScroll=null;
+    }
+    status(`${n} / ${pdf.numPages} 페이지 · 드래그하여 빈칸을 그리세요.`);
   }catch(e){if(version===renderVersion&&e.name!=='RenderingCancelledException')status(`페이지를 표시할 수 없습니다. ${e.message}`,true);}
   finally{if(version===renderVersion){rendering=false;renderTask=null;controls();}}
 }
@@ -125,7 +138,7 @@ async function openFile(file){
     const first=await candidate.getPage(1),base=first.getViewport({scale:1});
     const fit=clamp(($('viewport').clientWidth-70)/base.width,.25,1.3);
     const shot=await snapshot(candidate,1,fit);
-    const old=pdf;pdf=candidate;candidate=null;pageNumber=1;zoom=fit;histories=new Map();savedSignature='[]';selected=-1;
+    const old=pdf;pdf=candidate;candidate=null;pageNumber=1;zoom=fit;targetZoom=fit;histories=new Map();savedSignature='[]';selected=-1;
     documentMeta={name:file.name,sha256:hash,pageCount:pdf.numPages};
     $('filename').textContent=file.name;$('document-info').textContent=`${pdf.numPages}페이지 · 로컬 PDF`;
     display(shot);status('PDF를 열었습니다. 가릴 부분을 드래그하세요.');
@@ -140,8 +153,9 @@ for(const id of ['open','open-empty'])$(id).onclick=()=>$('file').click();
 for(const id of ['draw','select'])$(id).onclick=()=>{cancelGesture();mode=id;selected=-1;$('mode-hint').textContent=mode==='draw'?'가릴 부분을 마우스로 드래그하세요. 흰색 바탕과 검은 테두리로 채워집니다.':'빈칸을 클릭해 선택하고 이동하세요. 모서리를 끌어 크기를 바꿀 수 있습니다.';redraw();controls();};
 $('prev').onclick=()=>render(pageNumber-1);$('next').onclick=()=>render(pageNumber+1);
 $('page-number').onchange=e=>{const n=Number(e.target.value);if(Number.isInteger(n)&&n>=1&&n<=pdf.numPages)render(n);else controls();};
-$('zoom-in').onclick=()=>render(pageNumber,clamp(zoom+.2,.25,3));$('zoom-out').onclick=()=>render(pageNumber,clamp(zoom-.2,.25,3));
-$('fit').onclick=()=>render(pageNumber,clamp(($('viewport').clientWidth-70)/bounds.width,.25,3));
+$('zoom-in').onclick=()=>{targetZoom=clamp(Math.round((zoom+.2)*100)/100,.25,3);render(pageNumber,targetZoom);};
+$('zoom-out').onclick=()=>{targetZoom=clamp(Math.round((zoom-.2)*100)/100,.25,3);render(pageNumber,targetZoom);};
+$('fit').onclick=()=>{const newZ=clamp(($('viewport').clientWidth-70)/bounds.width,.25,3);targetZoom=newZ;render(pageNumber,newZ);};
 function undo(redo=false){if(!pdf||busy())return;cancelGesture();redo?history().redo():history().undo();selected=-1;redraw();controls();}
 $('undo').onclick=()=>undo();$('redo').onclick=()=>undo(true);
 function remove(){if(!pdf||busy()||selected<0)return;const rects=history().current;rects.splice(selected,1);history().commit(rects);selected=-1;redraw();controls();}
@@ -149,7 +163,7 @@ $('delete').onclick=remove;
 function point(event){const b=$('overlay').getBoundingClientRect();return{x:clamp((event.clientX-b.left)/b.width*bounds.width,0,bounds.width),y:clamp((event.clientY-b.top)/b.height*bounds.height,0,bounds.height)};}
 function cancelGesture(){if(!gesture)return;gesture=null;redraw();}
 $('overlay').addEventListener('pointerdown',e=>{
-  if(busy()||!pdf||e.button!==0||gesture)return;e.preventDefault();$('overlay').focus();
+  if(busy()||!pdf||e.button!==0||gesture||spaceDown)return;e.preventDefault();$('overlay').focus();
   const p=point(e),rects=history().current;
   if(mode==='draw'){selected=-1;gesture={type:'draw',start:p,rects,index:rects.length,pointer:e.pointerId};}
   else{
@@ -180,12 +194,87 @@ $('overlay').addEventListener('pointerup',e=>{
 });
 $('overlay').addEventListener('pointercancel',cancelGesture);
 $('overlay').addEventListener('lostpointercapture',cancelGesture);
+$('viewport').addEventListener('wheel',e=>{
+  if(!pdf||busy()||e.deltaY===0)return;
+  e.preventDefault();
+  const step=e.deltaY<0?0.1:-0.1;
+  const nextZoom=clamp(Math.round((targetZoom+step)*100)/100,0.25,3);
+  if(nextZoom===targetZoom)return;
+
+  const vp=$('viewport'),vpRect=vp.getBoundingClientRect();
+  const paper=$('paper'),paperRect=paper.getBoundingClientRect();
+  const mouseX=e.clientX-vpRect.left,mouseY=e.clientY-vpRect.top;
+  const paperX=e.clientX-paperRect.left,paperY=e.clientY-paperRect.top;
+  const ratio=nextZoom/zoom;
+
+  let targetScrollLeft,targetScrollTop;
+  if(paperX>=0&&paperX<=paperRect.width&&paperY>=0&&paperY<=paperRect.height){
+    targetScrollLeft=paper.offsetLeft+paperX*ratio-mouseX;
+    targetScrollTop=paper.offsetTop+paperY*ratio-mouseY;
+  }else{
+    targetScrollLeft=(vp.scrollLeft+mouseX)*ratio-mouseX;
+    targetScrollTop=(vp.scrollTop+mouseY)*ratio-mouseY;
+  }
+  pendingScroll={left:targetScrollLeft,top:targetScrollTop};
+  targetZoom=nextZoom;
+  $('zoom-label').textContent=`${Math.round(targetZoom*100)}%`;
+  clearTimeout(wheelTimer);
+  wheelTimer=setTimeout(()=>render(pageNumber,targetZoom),40);
+},{passive:false});
+$('viewport').addEventListener('pointerdown',e=>{
+  if(!pdf||busy()||e.button!==0||!spaceDown)return;
+  e.preventDefault();
+  isPanning=true;
+  panStart={x:e.clientX,y:e.clientY,scrollLeft:$('viewport').scrollLeft,scrollTop:$('viewport').scrollTop,pointerId:e.pointerId};
+  $('viewport').setPointerCapture(e.pointerId);
+  updateCursor();
+});
+$('viewport').addEventListener('pointermove',e=>{
+  if(!isPanning||!panStart||e.pointerId!==panStart.pointerId)return;
+  $('viewport').scrollLeft=panStart.scrollLeft-(e.clientX-panStart.x);
+  $('viewport').scrollTop=panStart.scrollTop-(e.clientY-panStart.y);
+});
+function endPan(e){
+  if(!isPanning)return;
+  if(!e||!panStart||e.pointerId===panStart.pointerId){
+    isPanning=false;
+    if(panStart&&$('viewport').hasPointerCapture(panStart.pointerId)){
+      try{$('viewport').releasePointerCapture(panStart.pointerId);}catch{}
+    }
+    panStart=null;
+    updateCursor();
+  }
+}
+$('viewport').addEventListener('pointerup',endPan);
+$('viewport').addEventListener('pointercancel',endPan);
+$('viewport').addEventListener('lostpointercapture',endPan);
 document.addEventListener('keydown',e=>{
-  if(e.target.matches('input,select,textarea')||busy()||!pdf)return;
+  if(e.target.matches('input,select,textarea')||!pdf)return;
+  if(e.code==='Space'){
+    if(!spaceDown){
+      spaceDown=true;
+      if(gesture)cancelGesture();
+      updateCursor();
+    }
+    e.preventDefault();
+    return;
+  }
+  if(busy())return;
   if(e.key==='Escape'){cancelGesture();selected=-1;redraw();controls();}
   if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();remove();}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo(e.shiftKey);}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();undo(true);}
+});
+document.addEventListener('keyup',e=>{
+  if(e.code==='Space'){
+    spaceDown=false;
+    if(!isPanning)updateCursor();
+  }
+});
+window.addEventListener('blur',()=>{
+  spaceDown=false;
+  if(isPanning){isPanning=false;panStart=null;}
+  updateCursor();
 });
 window.addEventListener('beforeunload',e=>{if(dirty()||exporting){e.preventDefault();e.returnValue='';}});
 $('cancel').onclick=()=>{exportController?.abort();$('cancel').disabled=true;status('변환을 취소하고 있습니다…');};
